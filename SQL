@@ -1,0 +1,132 @@
+/* Cleaning data in SQL */
+
+-- Check if the data is loaded
+SELECT * FROM [NashvilleHousing csv]
+
+-- Standardize Date format
+SELECT SaleDate, CONVERT(Date,SaleDate)
+FROM [NashvilleHousing csv]
+
+UPDATE [NashvilleHousing csv]
+SET SaleDate = CONVERT(Date,SaleDate)
+
+-- Populate Property Address data
+SELECT PropertyAddress FROM [NashvilleHousing csv]
+WHERE PropertyAddress IS NULL
+ORDER BY ParcelID
+
+-- Shows a same Parcel ID but with Property Address and No Property Address then fixing
+-- Self Join to identify missing values in PropertyAddress
+SELECT a.ParcelID, a.PropertyAddress, b.ParcelID, b.PropertyAddress,
+  COALESCE(a.PropertyAddress, b.PropertyAddress)
+FROM [NashvilleHousing csv] a
+JOIN [NashvilleHousing csv] b
+ON a.ParcelID = b.ParcelID AND a.UniqueID <> b.UniqueID
+WHERE a.PropertyAddress IS NULL
+-- Fixing
+UPDATE a
+SET PropertyAddress
+FROM [NashvilleHousing csv] a
+JOIN [NashvilleHousing csv] b
+ON a.ParcelID = b.ParcelID AND a.UniqueID <> b.UniqueID
+WHERE a.PropertyAddress IS NULL
+
+-- Breaking out Address into Individual Columns (Address, City, State)
+-- Create columns for Address and City regarding the PropertyAddress
+SELECT
+SUBSTRING(PropertyAddress, 1, STRPOS(PropertyAddress,',')-1) AS Address,
+SUBSTRING(PropertyAddress, STRPOS(PropertyAddress,',') + 1 , LEN(PropertyAddress)) as City
+FROM [NashvilleHousing csv]
+-- Add columns for Address and City
+ALTER TABLE [NashvilleHousing csv]
+ADD PropertySplitAddress Nvarchar(255)
+
+UPDATE [NashvilleHousing csv]
+SET PropertySplitAddress = SUBSTRING(PropertyAddress, 1, STRPOS(PropertyAddress,',')-1)
+
+ALTER TABLE [NashvilleHousing csv]
+ADD PropertySplitCity Nvarchar(255)
+
+UPDATE [NashvilleHousing csv]
+SET PropertySplitCity = SUBSTRING(PropertyAddress, STRPOS(PropertyAddress,',') + 1 , LEN(PropertyAddress))
+
+SELECT * FROM [NashvilleHousing csv]
+
+-- Breaking out OwnerAddress into Individual Columns
+-- Create columns for Address, City, States regarding the OwnerAddress
+SELECT OwnerAddress FROM [NashvilleHousing csv]
+
+SELECT
+SPLIT_PART(OwnerAddress,',',1) AS Address,
+SPLIT_PART(OwnerAddress,',',2) AS City,
+SPLIT_PART(OwnerAddress,',',3) AS States
+FROM [NashvilleHousing csv]
+
+-- Add columns for Address, City, States for OwnerAddress
+ALTER TABLE [NashvilleHousing csv]
+ADD OwnerSplitAdress Nvarchar(255)
+
+UPDATE [NashvilleHousing csv]
+SET OwnerSplitAdress = SPLIT_PART(OwnerAddress,',',1)
+
+ALTER TABLE [NashvilleHousing csv]
+ADD OwnerSplitCity Nvarchar(255)
+
+UPDATE [NashvilleHousing csv]
+SET OwnerSplitCity = SPLIT_PART(OwnerAddress,',',2)
+
+ALTER TABLE [NashvilleHousing csv]
+ADD OwnerSplitStates Nvarchar(255)
+
+UPDATE [NashvilleHousing csv]
+SET OwnerSplitStates = SPLIT_PART(OwnerAddress,',',3)
+
+SELECT * FROM [NashvilleHousing csv]
+
+-- Change Y and N to Yes and No in "Sold as Vacant" field
+-- Check what distinctive values are there in "Sold as Vacant" field
+SELECT DISTINCT(SoldAsVacant) FROM [NashvilleHousing csv]
+-- Replace Y/N to Yes/No
+SELECT SoldAsVacant
+CASE
+  WHEN SoldAsVacant = 'Y' THEN 'Yes'
+  WHEN SoldAsVacant = 'N' THEN 'No'
+  ELSE SoldAsVacant
+END
+FROM [NashvilleHousing csv]
+
+UPDATE [NashvilleHousing csv]
+SET SoldAsVacant =
+CASE
+  WHEN SoldAsVacant = 'Y' THEN 'Yes'
+  WHEN SoldAsVacant = 'N' THEN 'No'
+  ELSE SoldAsVacant
+END
+
+-- Remove Duplicates
+-- Show Duplicates
+WITH RowNum AS
+(
+  SELECT *, ROW_NUMBER() OVER
+  (PARTITION BY ParcelID, PropertyAddress, SalesPrice, SaleDate, LegalReference ORDER BY UniqueID) AS row_num
+  FROM [NashvilleHousing csv]
+)
+SELECT * FROM RowNum
+WHERE row_num > 1
+-- Delete Duplicates
+WITH RowNum AS
+(
+  SELECT *, ROW_NUMBER() OVER
+  (PARTITION BY ParcelID, PropertyAddress, SalesPrice, SaleDate, LegalReference ORDER BY UniqueID) AS row_num
+  FROM [NashvilleHousing csv]
+)
+DELETE
+FROM RowNum
+WHERE row_num > 1
+
+
+-- Delete Unused Columns
+ALTER TABLE [NashvilleHousing csv]
+DROP COLUMN TaxDitrict
+
+SELECT * FROM [NashvilleHousing csv]
